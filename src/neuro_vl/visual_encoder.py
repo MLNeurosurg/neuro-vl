@@ -1,0 +1,430 @@
+import os
+import sys
+sys.path.append(os.path.abspath('.'))
+
+from functools import partial
+
+import torch
+import torch.nn as nn
+
+from timm.models import register_model, build_model_with_cfg, checkpoint # torch.utils.checkpoint
+from timm.models.vision_transformer import VisionTransformer
+
+from .patch_embed import PatchEmbed3D
+from .pos_embed import study_pos_embed, resample_3d_posemb, dynamic_resample_1d_posemb
+
+
+# NOTE: we have to do expand_as() somewhere in this script, as scatter-with-broadcas limitation has existed since PyTorch 1.12.
+
+
+class HLIPVisualEncoder(VisionTransformer):
+    def __init__(self, **kwargs):
+        max_num_scans = kwargs.pop('max_num_scans')
+        self.slice_attn_indexes = kwargs.pop('slice_attn_indexes', ())
+        self.scan_attn_indexes = kwargs.pop('scan_attn_indexes', ())
+        self.study_attn_indexes = kwargs.pop('study_attn_indexes', ())
+        self.global_pool_dinotxt = kwargs.pop('global_pool_dinotxt', False)
+        super().__init__(**kwargs)
+
+        # reset pos_embed
+        spatial_posemb, sequential_posemb = study_pos_embed(
+            max_num_scans=max_num_scans,
+            grid_size=self.patch_embed.grid_size,
+            embed_dim=self.embed_dim,
+            pretrained_posemb=None,
+        )
+        self.register_buffer("spatial_posemb", spatial_posemb, persistent=True)
+        if sequential_posemb is not None:
+            self.register_buffer("sequential_posemb", sequential_posemb, persistent=True)
+        else:
+            self.sequential_posemb = None
+
+    def _pos_embed(self, x, study_mask):
+        # x [n, d, h, w, c], study_mask [bs, max_num_scans]
+        n, d, h, w, _ = x.shape
+        spatial_posemb = resample_3d_posemb(self.spatial_posemb, (d, h, w), self.patch_embed.grid_size)
+        x = x + spatial_posemb.expand(n, -1, -1, -1, -1)
+        
+        if self.sequential_posemb is not None:
+            sequential_posemb = dynamic_resample_1d_posemb(self.sequential_posemb, study_mask, is_train=self.training)
+            x = x + sequential_posemb[:, None, None, None, :]
+
+        x = x.flatten(1, 3)
+        x = self.pos_drop(x)
+
+        to_cat = []
+        if self.cls_token is not None:
+            to_cat.append(self.cls_token.expand(x.shape[0], -1, -1))
+        if self.reg_token is not None:
+            to_cat.append(self.reg_token.expand(x.shape[0], -1, -1))
+        if to_cat:
+            x = torch.cat(to_cat + [x], dim=1)
+
+        return x, d
+
+    def _slice2scan(self, x, num_slices):
+        # x [sum(num_scans) * num_slices, l, c] # num_slices int
+        prefix_tokens, src = x[:, :self.num_prefix_tokens, :].contiguous(), x[:, self.num_prefix_tokens:, :].contiguous()
+        BND, L, C = src.shape
+
+        prefix_tokens = prefix_tokens.view(BND // num_slices, num_slices, self.num_prefix_tokens, C).mean(dim=1)
+        src = src.view(BND // num_slices, num_slices, L, C).view(BND // num_slices, num_slices * L, C)
+
+        x = torch.cat([prefix_tokens, src], dim=1)
+        return x
+
+    def _scan2study(self, x, num_scans, study_mask, scan_idx=None):
+        # x [sum(num_scans), l, c] # num_scans [bs] # study_mask [bs, max_num_scans] 
+        # # scan_idx [bs, max_num_scans]: a buffer living in the forward function
+        prefix_tokens, src = x[:, :self.num_prefix_tokens, :].contiguous(), x[:, self.num_prefix_tokens:, :].contiguous()
+        _, L, C = src.shape; B, max_num_scans = study_mask.shape; device = x.device
+
+        # for prefix_tokens
+        idx = torch.arange(B, device=device).repeat_interleave(num_scans)
+        avg_prefix_tokens = torch.zeros(B, self.num_prefix_tokens, C, device=device, dtype=x.dtype)
+        avg_prefix_tokens.scatter_add_(0, idx[:, None, None].expand_as(prefix_tokens), prefix_tokens)
+        avg_prefix_tokens /= num_scans[:, None, None]
+
+        # for src
+        if scan_idx is None:
+            idx_within_a_batch = torch.arange(max_num_scans, device=device).unsqueeze(0).expand(B, -1)[study_mask]
+            batch_idx = torch.repeat_interleave(torch.arange(B, device=device), repeats=num_scans)
+            scan_idx = idx_within_a_batch + batch_idx * max_num_scans
+
+        study_src = torch.zeros(B * max_num_scans, L, C, device=device, dtype=x.dtype)
+        study_src.scatter_(0, scan_idx[:, None, None].expand_as(src), src)
+        study_src = study_src.view(B, max_num_scans * L, C)
+
+        x = torch.cat([avg_prefix_tokens, study_src], dim=1)
+        return x, scan_idx
+    
+    def _slice2study(self, x, num_scans, num_slices, study_mask, scan_idx=None):
+        # x [sum(num_scans) * num_slices, l, c] # num_scans [bs] # study_mask [bs, max_num_scans]
+        # # scan_idx [bs, max_num_scans]: a buffer living in the forward function
+        x = self._slice2scan(x, num_slices)
+        x, scan_idx = self._scan2study(x, num_scans, study_mask, scan_idx)
+        return x, scan_idx
+
+    def _study2scan(self, x, num_scans, study_mask):
+         # x [sum(num_scans), l, c] # num_scans [bs] # study_mask [bs, max_num_scans]
+        prefix_tokens, src = x[:, :self.num_prefix_tokens, :].contiguous(), x[:, self.num_prefix_tokens:, :].contiguous()
+        _, NL, C = src.shape; B, max_num_scans = study_mask.shape
+
+        prefix_tokens = torch.repeat_interleave(prefix_tokens, repeats=num_scans, dim=0)
+        src = src.view(B, max_num_scans, NL // max_num_scans, C)[study_mask]
+        
+        x = torch.cat([prefix_tokens, src], dim=1)
+        return x
+
+    def _scan2slice(self, x, num_slices):
+        # x [sum(num_scans), l, c] # num_slices int
+        prefix_tokens, src = x[:, :self.num_prefix_tokens, :].contiguous(), x[:, self.num_prefix_tokens:, :].contiguous()
+        BN, DL, C = src.shape
+
+        prefix_tokens = prefix_tokens.view(BN, 1, self.num_prefix_tokens, C).expand(-1, num_slices, -1, -1).contiguous()
+        src = src.view(BN, num_slices, DL // num_slices, C)
+
+        x = torch.cat([prefix_tokens, src], dim=2)
+        x = x.view(-1, self.num_prefix_tokens + DL // num_slices, C)
+        return x
+
+    def _study2slice(self, x, num_scans, num_slices, study_mask):
+        # x [sum(num_scans), l, c] # num_scans [bs] # study_mask [bs, max_num_scans]
+        x = self._study2scan(x, num_scans, study_mask)
+        x = self._scan2slice(x, num_slices)
+        return x
+    
+    def forward_intermediates(self, x, num_scans, feature_idx, feature_output_fmt):
+        assert feature_output_fmt == 'NLC' or feature_output_fmt == 'NDHWC'
+        max_num_scans = num_scans.max().item()
+        study_mask = torch.arange(max_num_scans, device=x.device).unsqueeze(0).lt(num_scans.unsqueeze(1)) # [bs, max_num_scans]
+
+        x = self.patch_embed(x)
+        _, D, H, W, _ = x.shape
+        x, num_slices = self._pos_embed(x, study_mask)
+        x = self.norm_pre(x)
+
+        attn_mask = torch.cat(
+            [torch.ones(study_mask.shape[0], self.num_prefix_tokens, device=x.device, dtype=torch.bool),
+            torch.repeat_interleave(study_mask, x.shape[1] - self.num_prefix_tokens, dim=1)], 
+            dim=1
+        )
+        attn_mask = attn_mask[:, None, None, :]
+        scan_idx = None
+
+        feature_output = {}
+        for idx, blk in enumerate(self.blocks):
+            if idx == 0 and idx in self.slice_attn_indexes:
+                x = self._scan2slice(x, num_slices)
+            if idx == 0 and idx in self.study_attn_indexes:
+                x, scan_idx = self._scan2study(x, num_scans, study_mask, scan_idx)
+
+
+            if idx-1 in self.slice_attn_indexes and idx in self.scan_attn_indexes:
+                x = self._slice2scan(x, num_slices)
+            elif idx-1 in self.slice_attn_indexes and idx in self.study_attn_indexes:
+                x, scan_idx = self._slice2study(x, num_scans, num_slices, study_mask, scan_idx)
+            elif idx-1 in self.scan_attn_indexes and idx in self.study_attn_indexes:
+                x, scan_idx = self._scan2study(x, num_scans, study_mask, scan_idx)
+            elif idx-1 in self.study_attn_indexes and idx in self.scan_attn_indexes:
+                x = self._study2scan(x, num_scans, study_mask)
+            elif idx-1 in self.study_attn_indexes and idx in self.slice_attn_indexes:
+                x = self._study2slice(x, num_scans, num_slices, study_mask)
+            elif idx-1 in self.scan_attn_indexes and idx in self.slice_attn_indexes:
+                x = self._scan2slice(x, num_slices)
+
+            if idx in self.study_attn_indexes:
+                if self.grad_checkpointing and not torch.jit.is_scripting():
+                    x = checkpoint(blk, x, attn_mask)
+                else:
+                    x = blk(x, attn_mask)
+            else:
+                if self.grad_checkpointing and not torch.jit.is_scripting():
+                    x = checkpoint(blk, x)
+                else:
+                    x = blk(x)
+
+            if idx in feature_idx:
+                if idx in self.scan_attn_indexes:
+                    features = x[:, self.num_prefix_tokens:, :].contiguous()
+                elif idx in self.study_attn_indexes:
+                    features = self._study2scan(x, num_scans, study_mask)
+                    features = features[:, self.num_prefix_tokens:, :].contiguous()
+                elif idx in self.slice_attn_indexes:
+                    features = self._slice2scan(x, num_slices)
+                    features = features[:, self.num_prefix_tokens:, :].contiguous()
+                
+                features = self.norm(features)
+                
+                if feature_output_fmt == 'NLC':
+                    feature_output.update({idx: features})
+                elif feature_output_fmt == 'NDHWC':
+                    N, _, C = features.shape
+                    feature_output.update({idx: features.view(N, D, H, W, C)})
+
+        return feature_output
+
+    def forward_features(self, x, num_scans):
+        # x [sum(num_scans), d, h, w, c], num_scans [bs]
+        max_num_scans = num_scans.max().item()
+        study_mask = torch.arange(max_num_scans, device=x.device).unsqueeze(0).lt(num_scans.unsqueeze(1)) # [bs, max_num_scans]
+
+        x = self.patch_embed(x)
+        x, num_slices = self._pos_embed(x, study_mask)
+        x = self.norm_pre(x)
+
+        attn_mask = torch.cat(
+            [torch.ones(study_mask.shape[0], self.num_prefix_tokens, device=x.device, dtype=torch.bool),
+            torch.repeat_interleave(study_mask, x.shape[1] - self.num_prefix_tokens, dim=1)], 
+            dim=1
+        )
+        attn_mask = attn_mask[:, None, None, :]
+        scan_idx = None
+        
+        for idx, blk in enumerate(self.blocks):
+            if idx == 0 and idx in self.slice_attn_indexes:
+                x = self._scan2slice(x, num_slices)
+            if idx == 0 and idx in self.study_attn_indexes:
+                x, scan_idx = self._scan2study(x, num_scans, study_mask, scan_idx)
+
+            if idx-1 in self.slice_attn_indexes and idx in self.study_attn_indexes:
+                x, scan_idx = self._slice2study(x, num_scans, num_slices, study_mask, scan_idx)
+            elif idx-1 in self.slice_attn_indexes and idx in self.scan_attn_indexes:
+                x = self._slice2scan(x, num_slices)
+            elif idx-1 in self.scan_attn_indexes and idx in self.study_attn_indexes:
+                x, scan_idx = self._scan2study(x, num_scans, study_mask, scan_idx)
+            elif idx-1 in self.study_attn_indexes and idx in self.slice_attn_indexes:
+                x = self._study2slice(x, num_scans, num_slices, study_mask)
+            elif idx-1 in self.study_attn_indexes and idx in self.scan_attn_indexes:
+                x = self._study2scan(x, num_scans, study_mask)
+            elif idx-1 in self.scan_attn_indexes and idx in self.slice_attn_indexes:
+                x = self._scan2slice(x, num_slices)
+
+            if idx in self.study_attn_indexes:
+                if self.grad_checkpointing and not torch.jit.is_scripting():
+                    x = checkpoint(blk, x, attn_mask)
+                else:
+                    x = blk(x, attn_mask)
+            else:
+                if self.grad_checkpointing and not torch.jit.is_scripting():
+                    x = checkpoint(blk, x)
+                else:
+                    x = blk(x)
+
+        if len(self.blocks) - 1 in self.scan_attn_indexes: 
+            x, scan_idx = self._scan2study(x, num_scans, study_mask, scan_idx)
+        if len(self.blocks) - 1 in self.slice_attn_indexes:
+            x, scan_idx = self._slice2study(x, num_scans, num_slices, study_mask, scan_idx)
+            
+        return self.norm(x)
+    
+    # NOTE: DION.TXT's head
+    def forward_head_dinotxt(self, x, pre_logits=False):
+        prefix_tokens = x[:, 0:self.num_prefix_tokens]
+        visual_tokens = x[:, self.num_prefix_tokens:].mean(dim=1, keepdim=True)
+        visual_tokens = visual_tokens.expand(-1, self.num_prefix_tokens, -1)
+        x = torch.cat([prefix_tokens, visual_tokens], dim=-1) # [b, num_prefix_tokens, 2*c]
+
+        x = self.fc_norm(x)
+        x = self.head_drop(x)
+        return x if pre_logits else self.head(x)
+    
+    def forward(self, x):
+        x = self.forward_features(x)
+        if self.global_pool_dinotxt:
+            x = self.forward_head_dinotxt(x)
+        else:
+            x = self.forward_head(x)
+            if self.num_prefix_tokens == 1:
+                x = x.unsqueeze(1)
+        return x
+
+
+def custom_checkpoint_filter_fn(state_dict, model, patch_size=(16, 16, 16)):
+    out_dict = {}
+    state_dict = state_dict.get('model', state_dict)
+    state_dict = state_dict.get('state_dict', state_dict)
+
+    # determine whether the cls_token has corresponding pos_embed
+    embed_len = state_dict['pos_embed'].shape[1]
+    if torch.sqrt(torch.tensor(embed_len)) != torch.sqrt(torch.tensor(embed_len)).floor():
+        out_dict['cls_token'] = state_dict.pop('cls_token') + state_dict['pos_embed'][:, 0]
+        state_dict['pos_embed'] = state_dict['pos_embed'][:, 1:]
+
+    for k, v in state_dict.items():
+        if 'patch_embed' in k:
+            if model.patch_embed.__class__ == PatchEmbed3D:
+                if 'weight' in k:
+                    if (v.shape[2], v.shape[3]) != (patch_size[1], patch_size[2]):
+                        v = torch.nn.functional.interpolate(v, size=(patch_size[1], patch_size[2]), mode='bicubic')
+                    v = v.sum(dim=1, keepdim=True).unsqueeze(2).repeat(1, 1, patch_size[0], 1, 1).div(patch_size[0])
+            else:
+                continue
+        if 'pos_embed' in k:
+            spatial_posemb, _ = study_pos_embed(
+                max_num_scans = 1,
+                grid_size = model.patch_embed.grid_size,
+                embed_dim = model.embed_dim,
+                pretrained_posemb = v
+            )
+            out_dict['spatial_posemb'] = spatial_posemb
+            continue
+        out_dict[k] = v
+    return out_dict
+
+
+def custom_create_vision_transformer(variant, **kwargs):
+    kwargs.pop('pretrained_cfg_overlay')
+    return build_model_with_cfg(
+        model_cls=HLIPVisualEncoder,
+        variant=variant,
+        pretrained_cfg_overlay=dict(first_conv=None),
+        pretrained_strict=False,
+        pretrained_filter_fn=partial(custom_checkpoint_filter_fn, patch_size=kwargs['patch_size']),
+        **kwargs,
+    )
+
+
+@register_model
+def hlip_2025_10_08(pretrained=False, **kwargs):
+    model_args = dict(
+        max_num_scans=0,
+        scan_attn_indexes=(0, 1, 3, 4, 6, 7, 9, 10),
+        study_attn_indexes=(2, 5, 8, 11),
+        global_pool_dinotxt=True,
+        img_size=(48, 224, 224), patch_size=(6, 16, 16),
+        in_chans=1, depth = 12, embed_dim=768, num_heads=12, num_classes=0, no_embed_class=True, pos_embed='none',
+        embed_layer=PatchEmbed3D, 
+    )
+    model = custom_create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **dict(model_args, **kwargs))
+    return model
+
+
+@register_model
+def vit_base_scan_dualdinotxt1568(pretrained=False, **kwargs):
+    model_args = dict(
+        max_num_scans=0,
+        scan_attn_indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+        global_pool_dinotxt=True, reg_tokens=1,
+        img_size=(48, 224, 224), patch_size=(6, 16, 16),
+        in_chans=1, depth = 12, embed_dim=768, num_heads=12, num_classes=0, no_embed_class=True, pos_embed='none',
+        embed_layer=PatchEmbed3D, 
+    )
+    model = custom_create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **dict(model_args, **kwargs))
+    return model
+
+
+@register_model
+def vit_base_scan_study_dualdinotxt1568(pretrained=False, **kwargs):
+    model_args = dict(
+        max_num_scans=0,
+        scan_attn_indexes=(0, 1, 3, 4, 6, 7, 9, 10),
+        study_attn_indexes=(2, 5, 8, 11),
+        global_pool_dinotxt=True, reg_tokens=1,
+        img_size=(48, 224, 224), patch_size=(6, 16, 16),
+        in_chans=1, depth = 12, embed_dim=768, num_heads=12, num_classes=0, no_embed_class=True, pos_embed='none',
+        embed_layer=PatchEmbed3D, 
+    )
+    model = custom_create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **dict(model_args, **kwargs))
+    return model
+
+
+@register_model
+def vit_base_slice_scan_study_dualdinotxt1568(pretrained=False, **kwargs):
+    model_args = dict(
+        max_num_scans=0, 
+        slice_attn_indexes=(0, 3, 6, 9),
+        scan_attn_indexes=(1, 4, 7, 10), 
+        study_attn_indexes=(2, 5, 8, 11),
+        global_pool_dinotxt=True, reg_tokens=1,
+        img_size=(48, 224, 224), patch_size=(6, 16, 16),
+        in_chans=1, depth = 12, embed_dim=768, num_heads=12, num_classes=0, no_embed_class=True, pos_embed='none',
+        embed_layer=PatchEmbed3D, 
+    )
+    model = custom_create_vision_transformer('vit_base_patch16_224', pretrained=pretrained, **dict(model_args, **kwargs))
+    return model
+
+
+@register_model
+def vit_large_scan_dualdinotxt1568(pretrained=False, **kwargs):
+    model_args = dict(
+        max_num_scans=0,
+        scan_attn_indexes=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23),
+        global_pool_dinotxt=True, reg_tokens=1,
+        img_size=(48, 224, 224), patch_size=(6, 16, 16),
+        in_chans=1, depth = 24, embed_dim=1024, num_heads=16, num_classes=0, no_embed_class=True, pos_embed='none',
+        embed_layer=PatchEmbed3D,
+    )
+    model = custom_create_vision_transformer('vit_large_patch16_224', pretrained=pretrained, **dict(model_args, **kwargs))
+    return model
+
+
+@register_model
+def vit_large_scan_study_dualdinotxt1568(pretrained=False, **kwargs):
+    model_args = dict(
+        max_num_scans=0,
+        scan_attn_indexes=(0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22),
+        study_attn_indexes=(5, 11, 17, 23),
+        global_pool_dinotxt=True, reg_tokens=1,
+        img_size=(48, 224, 224), patch_size=(6, 16, 16),
+        in_chans=1, depth = 24, embed_dim=1024, num_heads=16, num_classes=0, no_embed_class=True, pos_embed='none',
+        embed_layer=PatchEmbed3D,
+    )
+    model = custom_create_vision_transformer('vit_large_patch16_224', pretrained=pretrained, **dict(model_args, **kwargs))
+    return model
+
+
+@register_model
+def vit_large_slice_scan_study_dualdinotxt1568(pretrained=False, **kwargs):
+    model_args = dict(
+        max_num_scans=0, 
+        slice_attn_indexes=(0, 1, 2, 3, 6, 7, 8, 9, 12, 13, 14, 15, 18, 19, 20, 21),
+        scan_attn_indexes=(4, 10, 16, 22), 
+        study_attn_indexes=(5, 11, 17, 23),
+        global_pool_dinotxt=True, reg_tokens=1,
+        img_size=(48, 224, 224), patch_size=(6, 16, 16),
+        in_chans=1, depth = 24, embed_dim=1024, num_heads=16, num_classes=0, no_embed_class=True, pos_embed='none',
+        embed_layer=PatchEmbed3D,
+    )
+    model = custom_create_vision_transformer('vit_large_patch16_224', pretrained=pretrained, **dict(model_args, **kwargs))
+    return model
