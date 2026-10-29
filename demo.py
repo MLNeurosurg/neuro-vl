@@ -7,7 +7,6 @@ import random
 import re
 import numpy as np
 from pathlib import Path
-from matplotlib import pyplot as plt
 
 import torch
 from torchvision.transforms import Normalize

@@ -26,8 +26,8 @@ TEMPERATURE=0.6
 
 # MR Rate
 MR_RATE_DATASET="mr_rate"
-MR_RATE_DATA_ROOT="/path/to/neurobench/data/tensor/"
-MR_RATE_CSV_ROOT="../../data"
+MR_RATE_DATA_ROOT="/path/to/neurobench_data/data/tensor/"
+MR_RATE_CSV_ROOT="/path/to/neurobench_data/visual_question_answering"
 MR_RATE_OUTPUT_ROOT="${RESULTS_ROOT%/}/mr_rate"
 MR_RATE_TASKS=(
   describe
@@ -82,8 +82,12 @@ run_evaluation() {
 }
 
 for task in "${MR_RATE_TASKS[@]}"; do
+  csv_family="closed_ended"
+  if [[ "${task}" == "report" ]]; then
+    csv_family="report_generation"
+  fi
   run_evaluation \
     "${MR_RATE_DATA_ROOT}" \
-    "${MR_RATE_CSV_ROOT}/${MR_RATE_DATASET}/${task}.csv" \
+    "${MR_RATE_CSV_ROOT}/${csv_family}/${MR_RATE_DATASET}/${task}.csv" \
     "${MR_RATE_OUTPUT_ROOT}/${task}/${MODEL_NAME}/"
 done

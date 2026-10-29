@@ -26,8 +26,8 @@ TEMPERATURE=0.6
 
 # CQ500
 CQ500_DATASET="cq500"
-CQ500_DATA_ROOT="/path/to/neurobench/data/tensor/"
-CQ500_CSV_ROOT="../../data"
+CQ500_DATA_ROOT="/path/to/neurobench_data/data/tensor/"
+CQ500_CSV_ROOT="/path/to/neurobench_data/visual_question_answering/closed_ended"
 CQ500_OUTPUT_ROOT="${RESULTS_ROOT%/}/cq500"
 CQ500_TASKS=(
   diagnose

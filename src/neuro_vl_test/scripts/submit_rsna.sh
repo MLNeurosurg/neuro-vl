@@ -26,8 +26,8 @@ TEMPERATURE=0.6
 
 # RSNA
 RSNA_DATASET="rsna"
-RSNA_DATA_ROOT="/path/to/neurobench/data/tensor/"
-RSNA_CSV_ROOT="../../data"
+RSNA_DATA_ROOT="/path/to/neurobench_data/data/tensor/"
+RSNA_CSV_ROOT="/path/to/neurobench_data/visual_question_answering/closed_ended"
 RSNA_OUTPUT_ROOT="${RESULTS_ROOT%/}/rsna"
 RSNA_TASKS=(
   diagnose
