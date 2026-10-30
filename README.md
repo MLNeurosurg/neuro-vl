@@ -1,7 +1,8 @@
 # Neuro-VL
-> Official PyTorch implementation of the following paper:
-> A multimodal intelligence for neuroimaging
+> Official PyTorch implementation of the following paper:\
+> A multimodal intelligence for neuroimaging\
 > University of Michigan
+
 [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking) [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench)
 
 ## Overview
