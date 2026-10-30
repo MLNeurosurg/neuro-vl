@@ -1,55 +1,25 @@
-<h1 align="center">Neuro-VL</h1>
+# Neuro-VL
+> University of Michigan
 
-<p align="center">
-  <strong>A vision-language model for clinical interpretation of 3D neuroimaging.</strong><br>
-  <i>University of Michigan</i>
-</p>
 
-<p align="center">
-  <a href="https://huggingface.co/mlinslab/neuro-vl-8b-thinking">Model weights</a> ·
-  <a href="https://neurovl.mlins.org/">Online demo</a> ·
-  <a href="#getting-started">Getting started</a> ·
-  <a href="#evaluation">Evaluation</a> ·
-  <a href="#training">Training</a> ·
-  <a href="https://github.com/MLNeurosurg/neurobench">NeuroBench</a>
-</p>
-
-<p align="center">
-  <a href="https://huggingface.co/mlinslab/neuro-vl-8b-thinking"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Weights-7568A7" alt="Model weights on Hugging Face" /></a>
-  <a href="https://huggingface.co/datasets/mlinslab/neurobench"><img src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Dataset-7568A7" alt="NeuroBench dataset on Hugging Face" /></a>
-</p>
-
-## 🧠 Overview
-
-**Neuro-VL** is a vision-language model for neuroradiology. It processes full imaging **studies** comprising one or more **3D scans** to answer questions and generate radiology reports. It also supports longitudinal inputs containing multiple studies.
-
-This repository provides the model implementation and code for inference and training. This model was released alongside **NeuroBench** ([GitHub](https://github.com/MLNeurosurg/neurobench), [Hugging Face](https://huggingface.co/datasets/mlinslab/neurobench)), an open-source evaluation benchmark for clinical neuroimaging interpretation.
-
+## Overview
 ![Neuro-VL overview](docs/figure_1.png)
 
-## 📢 Updates
+## Updates
+**(2026-11)** Release Neuro-VL website https://neurovl.mlins.org/, model weight [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), evaluation benchmark [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench), and this official implementation [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/MLNeurosurg/neuro-vl).
 
-- **(2026-11)** Initial launch of Neuro-VL, including the [online demo](https://neurovl.mlins.org/), [model weights](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), [evaluation dataset (NeuroBench)](https://huggingface.co/datasets/mlinslab/neurobench), and this official implementation.
+## Getting Started
 
-<a id="getting-started"></a>
-
-## 🚀 Getting started
-
-### 1. Install
-
-Clone the repository and create the Conda environment:
-
+### Install 
 ```bash
-git clone https://github.com/MLNeurosurg/neuro-vl.git
+git@github.com:zch0414/neuro-vl.git
 cd neuro-vl
 conda env create -f ./environment.yaml
 conda activate neuro_vl
 ```
 
-### 2. Download weights
-
-Download the [Neuro-VL model weights](https://huggingface.co/mlinslab/neuro-vl-8b-thinking) from Hugging Face:
-
+### Model
+Download the model from [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking):
 ```python
 from huggingface_hub import snapshot_download
 
@@ -62,24 +32,18 @@ model_dir = snapshot_download(
 print(f"Checkpoint folder: {model_dir}")
 ```
 
-### 3. Run a demo
-
-Run a local example with the downloaded weights:
-
+### Demo
+Join the waitlist for the online demo at TODO, or download the model and run a demo locally:
 ```bash
 python demo.py --model /path/to/neuro-vl-8b-thinking/ --input CQ500CT107 --user_prompt "What do you see?"
 ```
 
-The `--input` argument selects the example study. `CQ500CT107`, `ReMIND-071/study_1`, and `ReMIND-071/study_2` are single-study examples. `ReMIND-071` is a longitudinal example containing multiple studies taken at different timepoints.
+The <code>--input</code> parameter controls which data is used. <code>CQ500CT107</code>, <code>ReMIND-071/study_1</code>, and <code>ReMIND-071/study_2</code> are three single-study examples, while <code>ReMIND-071</code> is a longitudinal example.
 
-Use `--provide_scan_type` to provide the scan type explicitly for each input scan. Otherwise, the model predicts the scan type from the image features.
+Use <code>--provide_scan_type</code> to explicitly provide the scan type for each input scan to the model. Otherwise, the model will predict the scan type based on the image feature.
 
-<a id="evaluation"></a>
-
-## 📊 Evaluation
-
-Download the preprocessed scans from the [NeuroBench dataset](https://huggingface.co/datasets/mlinslab/neurobench) in the tensor format expected by Neuro-VL:
-
+### Evaluation
+Download the processed tensor dataset from [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench):
 ```python
 from pathlib import Path
 from huggingface_hub import snapshot_download
@@ -88,27 +52,25 @@ snapshot_download(
     repo_id="mlinslab/neurobench",
     repo_type="dataset",
     allow_patterns="data/tensor/**",
-    local_dir="./neurobench_data",
+    local_dir="./neurobench",
 )
 
-root = Path("./neurobench_data/data/tensor/rsna")
+root = Path("./neurobench/data/tensor/rsna")
 for batch in root.glob("batch_[0-4]"):
     for patient in batch.iterdir():
         patient.rename(root / patient.name)
     batch.rmdir()
 ```
 
-Download the corresponding question CSVs from [NeuroBench](https://huggingface.co/datasets/mlinslab/neurobench). Configure the model, scan, CSV, and output paths in the [inference scripts](src/neuro_vl_test/scripts/), then run them to generate responses for each question.
+Run the scripts in `/src/neuro_vl_test/scripts/` to generate model responses for each question. To score the generated responses, follow the instructions in the NeuroBench repository on [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/MLNeurosurg/neurobench).
 
-To score the generated responses, follow the preparation and evaluation instructions in the [NeuroBench repository](https://github.com/MLNeurosurg/neurobench). Use the generated CSV with `--candidate_answer "neuro-vl answer" "Neuro-VL"` to select the model response column.
 
-<a id="training"></a>
+### Training
+Pre-train your visual encoder using the HLIP repository on [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/zch0414/hlip) or directly download from [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/zch0414/clip-vit_large-slice_scan_study-dualdinotxt1568). Then, run the commands below from `src/neuro_vl_sft/`:
 
-## 🛠️ Training
 
-Pretrain the visual encoder using [HLIP](https://github.com/zch0414/hlip), or download the [pretrained visual encoder](https://huggingface.co/zch0414/clip-vit_large-slice_scan_study-dualdinotxt1568) from Hugging Face. Run the commands below from `src/neuro_vl_sft/`, replacing the placeholder paths with your data and checkpoint locations.
 
-### Stage 1
+**Stage One**
 
 ```bash
 export WANDB_PROJECT=neuro-vl
@@ -141,9 +103,9 @@ accelerate launch --config_file ./fsdp_config.yaml main.py \
 --tf32
 ```
 
-### Stage 2
+**Stage Two**
 
-Use the connector checkpoint saved by Stage 1.
+Use the connector checkpoint saved by Stage One.
 
 ```bash
 export WANDB_PROJECT=neuro-vl
@@ -178,9 +140,9 @@ accelerate launch --config_file ./fsdp_config.yaml main.py \
 --tf32
 ```
 
-### Stage 3
+**Stage Three**
 
-Use the visual encoder, connector, and language model checkpoints saved by Stage 2.
+Use the visual encoder, connector, and language model checkpoints saved by Stage Two.
 
 ```bash
 export WANDB_PROJECT=neuro-vl
@@ -215,16 +177,8 @@ accelerate launch --config_file ./fsdp_config.yaml main.py \
 --tf32
 ```
 
-## 🤝 Support
-
-For questions, bug reports, or feedback, please [open an issue](https://github.com/MLNeurosurg/neuro-vl/issues).
-
-## 📖 Citation
-
-Neuro-VL was released alongside [NeuroBench](https://github.com/MLNeurosurg/neurobench). The Neuro-VL/NeuroBench manuscript and citation are coming soon.
-
-For the related language-image pretraining work, please cite:
-
+## Citation
+If you find this repository helpful, please consider citing:
 ```bib
 @article{zhao2026towards,
   title={Towards Scalable Language-Image Pre-training for 3D Medical Imaging},

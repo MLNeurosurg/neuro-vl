@@ -26,8 +26,8 @@ TEMPERATURE=0.6
 
 # CTRG-Brain-263K
 CTRG_DATASET="ctrg_brain_263k"
-CTRG_DATA_ROOT="/path/to/neurobench_data/data/tensor/"
-CTRG_CSV_ROOT="/path/to/neurobench_data/visual_question_answering"
+CTRG_DATA_ROOT="/path/to/neurobench/data/tensor/"
+CTRG_CSV_ROOT="../../data"
 CTRG_OUTPUT_ROOT="${RESULTS_ROOT%/}/ctrg_brain_263k"
 CTRG_TASKS=(
   describe
@@ -82,12 +82,8 @@ run_evaluation() {
 }
 
 for task in "${CTRG_TASKS[@]}"; do
-  csv_family="closed_ended"
-  if [[ "${task}" == "report" ]]; then
-    csv_family="report_generation"
-  fi
   run_evaluation \
     "${CTRG_DATA_ROOT}" \
-    "${CTRG_CSV_ROOT}/${csv_family}/${CTRG_DATASET}/${task}.csv" \
+    "${CTRG_CSV_ROOT}/${CTRG_DATASET}/${task}.csv" \
     "${CTRG_OUTPUT_ROOT}/${task}/${MODEL_NAME}/"
 done

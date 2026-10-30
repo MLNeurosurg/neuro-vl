@@ -24,12 +24,12 @@ PER_DEVICE_EVAL_BATCH_SIZE=4
 NUM_SAMPLES=1
 TEMPERATURE=0.6
 
-# OpenBrain
-OPEN_BRAIN_DATASET="open_brain"
-OPEN_BRAIN_DATA_ROOT="/path/to/neurobench_data/data/tensor/"
-OPEN_BRAIN_CSV_ROOT="/path/to/neurobench_data/visual_question_answering/closed_ended"
-OPEN_BRAIN_OUTPUT_ROOT="${RESULTS_ROOT%/}/open_brain"
-OPEN_BRAIN_TASKS=(
+# OpenBrain20
+OPEN_BRAIN_20_DATASET="open_brain_20"
+OPEN_BRAIN_20_DATA_ROOT="/path/to/neurobench/data/tensor/"
+OPEN_BRAIN_20_CSV_ROOT="../../data"
+OPEN_BRAIN_20_OUTPUT_ROOT="${RESULTS_ROOT%/}/open_brain_20"
+OPEN_BRAIN_20_TASKS=(
   describe
   diagnose
   localize
@@ -80,9 +80,9 @@ run_evaluation() {
     --temperature "${TEMPERATURE}"
 }
 
-for task in "${OPEN_BRAIN_TASKS[@]}"; do
+for task in "${OPEN_BRAIN_20_TASKS[@]}"; do
   run_evaluation \
-    "${OPEN_BRAIN_DATA_ROOT}" \
-    "${OPEN_BRAIN_CSV_ROOT}/${OPEN_BRAIN_DATASET}/${task}.csv" \
-    "${OPEN_BRAIN_OUTPUT_ROOT}/${task}/${MODEL_NAME}/"
+    "${OPEN_BRAIN_20_DATA_ROOT}" \
+    "${OPEN_BRAIN_20_CSV_ROOT}/${OPEN_BRAIN_20_DATASET}/${task}.csv" \
+    "${OPEN_BRAIN_20_OUTPUT_ROOT}/${task}/${MODEL_NAME}/"
 done
