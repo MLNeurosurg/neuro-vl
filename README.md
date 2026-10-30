@@ -1,18 +1,29 @@
 # Neuro-VL
+> Official PyTorch implementation of the following paper:
+> A multimodal intelligence for neuroimaging
 > University of Michigan
-
+[![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking) [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench)
 
 ## Overview
-![Neuro-VL overview](docs/figure_1.png)
+
+<p align="center">
+  <img
+    src="docs/figure_1.png"
+    alt="Neuro-VL overview"
+    style="width:96%; max-width:800px; height:auto;"
+  />
+</p>
+
+Neuro-VL comprises a language-image pretrained visual encoder that leverages a hierarchical attention mechanism inspired by the structure of neuroimaging data (adapted from HLIP), a multimodal connector (not shown), and an LLM. Neuro-VL was trained on the largest neuroimaging dataset to date, comprising more than 1 million studies from 450,000 patients and over 10 million volumetric scans. Neuro-VL generates robust radiological interpretations accompanied by an auditable reasoning trace. We evaluated Neuro-VL across internal health-system cohorts and 24 international public datasets, covering diverse tasks, including diagnosis, localization, description, and report generation, as well as clinical scenarios such as longitudinal disease monitoring and red-team analysis to assess robustness to misleading questions and clinical context.
 
 ## Updates
-**(2026-11)** Release Neuro-VL website https://neurovl.mlins.org/, model weight [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), evaluation benchmark [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench), and this official implementation [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/MLNeurosurg/neuro-vl).
+**(2026-11)** Complete the initiation of Neuro-VL repository. Release [online demo](https://neurovl.mlins.org/), model weight [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), and the evaluation benchmark [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench).
 
 ## Getting Started
 
 ### Install 
 ```bash
-git@github.com:zch0414/neuro-vl.git
+git@github.com:MLNeurosurg/neuro-vl.git
 cd neuro-vl
 conda env create -f ./environment.yaml
 conda activate neuro_vl
@@ -33,7 +44,7 @@ print(f"Checkpoint folder: {model_dir}")
 ```
 
 ### Demo
-Join the waitlist for the online demo at TODO, or download the model and run a demo locally:
+Join the waitlist for the [online demo](https://neurovl.mlins.org/), or download the model and run a demo locally:
 ```bash
 python demo.py --model /path/to/neuro-vl-8b-thinking/ --input CQ500CT107 --user_prompt "What do you see?"
 ```
@@ -62,11 +73,11 @@ for batch in root.glob("batch_[0-4]"):
     batch.rmdir()
 ```
 
-Run the scripts in `/src/neuro_vl_test/scripts/` to generate model responses for each question. To score the generated responses, follow the instructions in the NeuroBench repository on [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/MLNeurosurg/neurobench).
+Run the scripts in `/src/neuro_vl_test/scripts/` to generate model responses for each question. To rank the report generation results against those of other baselines, follow the [NeuroBench repository](https://github.com/MLNeurosurg/neurobench).
 
 
 ### Training
-Pre-train your visual encoder using the HLIP repository on [![GitHub](https://img.shields.io/badge/GitHub-181717?logo=github&logoColor=white)](https://github.com/zch0414/hlip) or directly download from [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/zch0414/clip-vit_large-slice_scan_study-dualdinotxt1568). Then, run the commands below from `src/neuro_vl_sft/`:
+Pretrain your visual encoder using the [HLIP repository](https://github.com/zch0414/hlip) or directly download from [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/zch0414/clip-vit_large-slice_scan_study-dualdinotxt1568). Then, run the commands below from `src/neuro_vl_sft/`:
 
 
 
