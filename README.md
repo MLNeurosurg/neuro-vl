@@ -1,4 +1,5 @@
 # Neuro-VL
+
 > Official PyTorch implementation of the following paper:\
 > A multimodal intelligence for neuroimaging\
 > University of Michigan
@@ -15,23 +16,29 @@
   />
 </p>
 
-Neuro-VL comprises a language-image pretrained visual encoder that leverages a hierarchical attention mechanism inspired by the structure of neuroimaging data (adapted from HLIP), a multimodal connector (not shown), and an LLM. Neuro-VL was trained on the largest neuroimaging dataset to date, containing nearly 1 million studies from 450,000 patients, comprising 10 million volumetric scans. Neuro-VL generates robust radiological interpretations accompanied by an auditable reasoning trace. We evaluated Neuro-VL across internal health-system cohorts and 24 international public datasets, covering diverse tasks, including diagnosis, localization, description, and report generation, as well as clinical scenarios such as longitudinal disease monitoring and red-team analysis to assess robustness to misleading questions and clinical context.
+Neuro-VL comprises a language-image pretrained visual encoder that leverages a hierarchical attention mechanism inspired by the structure of neuroimaging data (adapted from HLIP), a multimodal connector (not shown), and an LLM. Neuro-VL was trained on the largest neuroimaging dataset to date, with nearly 1 million studies comprising 10 million volumetric scans from 450,000 patients.
+
+Neuro-VL generates robust radiological interpretations accompanied by an auditable reasoning trace. We evaluated Neuro-VL across internal health-system cohorts and 24 international public datasets on tasks including diagnosis, localization, description, and report generation, as well as clinical scenarios including longitudinal disease monitoring and robustness to misleading questions and clinical context
 
 ## Updates
-**(2026-11)** Complete the initiation of the Neuro-VL repository. Release the [online demo](https://neurovl.mlins.org/), model weight [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), benchmark [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench), and [report generation judge](https://github.com/MLNeurosurg/neurobench).
+
+- **(2026-11)** Initial release of Neuro-VL, including this repository, [model weights](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), [benchmark datasets](https://huggingface.co/datasets/mlinslab/neurobench) and [evaluation tools with LLM judges](https://github.com/MLNeurosurg/neurobench), and an [online demo](https://neurovl.mlins.org/).
 
 ## Getting Started
 
-### Install 
+### Install
+
 ```bash
-git@github.com:MLNeurosurg/neuro-vl.git
+git clone git@github.com:MLNeurosurg/neuro-vl.git
 cd neuro-vl
 conda env create -f ./environment.yaml
 conda activate neuro_vl
 ```
 
 ### Model
+
 Download the model from [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking):
+
 ```python
 from huggingface_hub import snapshot_download
 
@@ -45,17 +52,21 @@ print(f"Checkpoint folder: {model_dir}")
 ```
 
 ### Demo
+
 Join the waitlist for the [online demo](https://neurovl.mlins.org/), or download the model and run a demo locally:
+
 ```bash
 python demo.py --model /path/to/neuro-vl-8b-thinking/ --input CQ500CT107 --user_prompt "What do you see?"
 ```
 
-The <code>--input</code> parameter controls which data is used. <code>CQ500CT107</code>, <code>ReMIND-071/study_1</code>, and <code>ReMIND-071/study_2</code> are three single-study examples, while <code>ReMIND-071</code> is a longitudinal example.
+The <code>--input</code> parameter selects an example study or a longitudinal pair of studies. <code>CQ500CT107</code>, <code>ReMIND-071/study_1</code>, and <code>ReMIND-071/study_2</code> are three single-study examples, while <code>ReMIND-071</code> is a longitudinal example.
 
-Use <code>--provide_scan_type</code> to explicitly provide the scan type for each input scan to the model. Otherwise, the model will predict the scan type based on the image feature.
+Use <code>--provide_scan_type</code> to explicitly provide a scan type label for each input scan to the model. Otherwise, the model will predict the scan type from the image features.
 
 ### Evaluation
+
 Download the processed tensor dataset from [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench):
+
 ```python
 from pathlib import Path
 from huggingface_hub import snapshot_download
@@ -74,13 +85,13 @@ for batch in root.glob("batch_[0-4]"):
     batch.rmdir()
 ```
 
-Run the scripts in `/src/neuro_vl_test/scripts/` to generate model responses for each question. To rank the report generation results against those of other baselines, follow the [NeuroBench repository](https://github.com/MLNeurosurg/neurobench).
+Use the question CSVs in `data/` and configure the model, image, CSV, and output paths in the [inference scripts](src/neuro_vl_test/scripts/). Run these scripts to generate model responses for each question.
 
+Score generated responses with the [NeuroBench evaluation tools](https://github.com/MLNeurosurg/neurobench), which include LLM judges for report generation and red-teaming. Select the response column with `--candidate_answer "neuro-vl answer" "Neuro-VL"`.
 
 ### Training
-Pretrain your visual encoder using the [HLIP repository](https://github.com/zch0414/hlip) or directly download from [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/zch0414/clip-vit_large-slice_scan_study-dualdinotxt1568). Then, run the commands below from `src/neuro_vl_sft/`:
 
-
+Pretrain your visual encoder using the [HLIP repository](https://github.com/zch0414/hlip) or download the pretrained visual encoder from [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/zch0414/clip-vit_large-slice_scan_study-dualdinotxt1568). Then, run the commands below from `src/neuro_vl_sft/`:
 
 **Stage One**
 
@@ -190,6 +201,7 @@ accelerate launch --config_file ./fsdp_config.yaml main.py \
 ```
 
 ## Citation
+
 If you find this repository helpful, please consider citing:
 ```bib
 @article{zhao2026towards,
