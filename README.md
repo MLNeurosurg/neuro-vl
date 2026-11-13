@@ -2,7 +2,7 @@
 
 > Official PyTorch implementation of the following paper:\
 > A frontier machine intelligence for human neuroimaging\
-> University of Michigan
+> University of Michigan\
 > [![arXiv](https://img.shields.io/badge/arXiv%20paper-2611.15094-b31b1b.svg)](https://arxiv.org/abs/2611.15094) [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking) [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench)
 
 ## Overview
