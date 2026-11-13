@@ -201,7 +201,7 @@ If you find this repository helpful, please consider citing:
 ```bib
 @article{zhao2026frontier,
   title={A frontier machine intelligence for human neuroimaging},
-  author={Zhao, Chenhui and Rao, Akshay and Kondepudi, Akhil and Lyu, Yiwei and Hou, Xinhai and Seshadri, Rikhil and Jiang, Cheng and Banerjee, Soumyanil and Joshi, Rushikesh and Harake, Samir and Srinivasan, Ashok and Mishra, Shruti and Rivas-Rodriguez, Francisco and Rhee, Seunghong and Roddenberry, Nathaniel and Chaudhary, Neeraj and Wilseck, Zach and Park, Paul and Lee, Honglak and Gulani, Vikas and Pandey, Aditya and Hollon, Todd},
+  author={Chenhui Zhao and Akshay Rao and Akhil Kondepudi and Yiwei Lyu and Xinhai Hou and Rikhil Seshadri and Cheng Jiang and Soumyanil Banerjee and Rushikesh Joshi and Samir Harake and Ashok Srinivasan and Shruti Mishra and Francisco Rivas-Rodriguez and Seunghong Rhee and Nathaniel Roddenberry and Neeraj Chaudhary and Zach Wilseck and Paul Park and Honglak Lee and Vikas Gulani and Aditya Pandey and Todd Hollon},
   journal={arXiv preprint arXiv:2611.15094},
   year={2026}
 }
