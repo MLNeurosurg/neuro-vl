@@ -1,10 +1,9 @@
 # Neuro-VL
 
 > Official PyTorch implementation of the following paper:\
-> A multimodal intelligence for neuroimaging\
+> A frontier machine intelligence for human neuroimaging\
 > University of Michigan
-
-[![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking) [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench)
+> [![arXiv](https://img.shields.io/badge/arXiv%20paper-2611.15094-b31b1b.svg)](https://arxiv.org/abs/2611.15094) [![huggingface weights](https://img.shields.io/badge/%F0%9F%A4%97%20Weights-yellow)](https://huggingface.co/mlinslab/neuro-vl-8b-thinking) [![huggingface Datasets](https://img.shields.io/badge/%F0%9F%A4%97%20Datasets-yellow)](https://huggingface.co/datasets/mlinslab/neurobench)
 
 ## Overview
 
@@ -16,13 +15,11 @@
   />
 </p>
 
-Neuro-VL comprises a language-image pretrained visual encoder that leverages a hierarchical attention mechanism inspired by the structure of neuroimaging data (adapted from HLIP), a multimodal connector (not shown), and an LLM. Neuro-VL was trained on the largest neuroimaging dataset to date, with nearly 1 million studies comprising 10 million volumetric scans from 450,000 patients.
-
-Neuro-VL generates robust radiological interpretations accompanied by an auditable reasoning trace. We evaluated Neuro-VL across internal health-system cohorts and 24 international public datasets on tasks including diagnosis, localization, description, and report generation, as well as clinical scenarios including longitudinal disease monitoring and robustness to misleading questions and clinical context
+Neuro-VL is a machine intelligence for human neuroimaging designed to reason over images and clinical context and communicate its interpretations through natural-language conversation. We developed Neuro-VL using nearly 1 million neuroimaging studies from 450,000 patients, comprising 10 million volumetric scans. Neuro-VL employs [HLIP](https://github.com/Zch0414/hlip) as the visual encoder that incorporates a hierarchical attention mechanism inspired by the inherent structure of neuroimaging data. This visual encoder was pretrained using radiology reports to extract semantically rich visual representations from complex neuroimaging studies. Building on these representations, Neuro-VL generates robust radiological interpretations accompanied by auditable reasoning traces.
 
 ## Updates
 
-- **(2026-11)** Initial release of Neuro-VL, including this repository, [model weights](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), [benchmark datasets](https://huggingface.co/datasets/mlinslab/neurobench) and [evaluation tools with LLM judges](https://github.com/MLNeurosurg/neurobench), and an [online demo](https://neurovl.mlins.org/).
+- **(2026-11)** Initial release of **Neuro-VL**, including this repository and [model weights](https://huggingface.co/mlinslab/neuro-vl-8b-thinking), the proposed benchmark [NeuroBench](https://huggingface.co/datasets/mlinslab/neurobench) and its accompanying [evaluation tools with LLM judges](https://github.com/MLNeurosurg/neurobench), as well as an [online demo](https://neurovl.mlins.org/).
 
 ## Getting Started
 
@@ -85,9 +82,7 @@ for batch in root.glob("batch_[0-4]"):
     batch.rmdir()
 ```
 
-Use the question CSVs in `data/` and configure the model, image, CSV, and output paths in the [inference scripts](src/neuro_vl_test/scripts/). Run these scripts to generate model responses for each question.
-
-Score generated responses with the [NeuroBench evaluation tools](https://github.com/MLNeurosurg/neurobench), which include LLM judges for report generation and red-teaming. Select the response column with `--candidate_answer "neuro-vl answer" "Neuro-VL"`.
+Run the scripts in `/src/neuro_vl_test/scripts/` to generate model responses for each question. To rank the report generation results against those of other baselines, follow the [NeuroBench repository](https://github.com/MLNeurosurg/neurobench).
 
 ### Training
 
@@ -204,6 +199,13 @@ accelerate launch --config_file ./fsdp_config.yaml main.py \
 
 If you find this repository helpful, please consider citing:
 ```bib
+@article{zhao2026frontier,
+  title={A frontier machine intelligence for human neuroimaging},
+  author={Zhao, Chenhui and Rao, Akshay and Kondepudi, Akhil and Lyu, Yiwei and Hou, Xinhai and Seshadri, Rikhil and Jiang, Cheng and Banerjee, Soumyanil and Joshi, Rushikesh and Harake, Samir and Srinivasan, Ashok and Mishra, Shruti and Rivas-Rodriguez, Francisco and Rhee, Seunghong and Roddenberry, Nathaniel and Chaudhary, Neeraj and Wilseck, Zach and Park, Paul and Lee, Honglak and Gulani, Vikas and Pandey, Aditya and Hollon, Todd},
+  journal={arXiv preprint arXiv:2611.15094},
+  year={2026}
+}
+
 @article{zhao2026towards,
   title={Towards Scalable Language-Image Pre-training for 3D Medical Imaging},
   author={Chenhui Zhao and Yiwei Lyu and Asadur Zaman Chowdury and Edward S Harake and Akhil Kondepudi and Akshay T Rao and Xinhai Hou and Honglak Lee and Todd C Hollon},
